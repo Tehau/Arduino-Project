@@ -37,9 +37,10 @@ const int maxStruct = 7;
 CycleArduino CycleGlobal;
 //Tableau de structure
 struct CycleArduino tabStruct[maxStruct];
-//Data SP#M0x40922053#A3#I8#
-String cycle="SP#M0x406FB3E9#A5#I6#";
-String Data="SEND#M0x406FB3E9#N2#DDUBOIS";
+//Data SP#M0x40762059#A3#I8#
+String cycle="SP#M0x40762059#A5#I6#";
+String Data="SEND#M0x40762059#C2#DDUBOIS";
+int MyLevel = -1;
 //Boolean for active
 boolean isActive = true;
 boolean Initialisation = true;
@@ -90,28 +91,9 @@ void setup() {
    Envoie le cycle du noeud en broadcast
  
  */
-
-void loop() {
  
-  if(Initialisation){
-    InitMode();
-    if(millis() - start > 20000)
-      Initialisation = false;
-  }
-  else{
-    if(isActive)
-      ActiveMode();
-    else{
-      InactiveMode();
-      Serial.flush(); //Flush
-    }
-  }
-  //ParserInfo("SEND#M4076205E#N4#DDUBOIS");
-}
 
-
-
-//Ne pas oublier de changer les variables à mettre en accord avec la structure
+/******* Structure de donnee *******/
 /*
 SP#M_#A_#I_ -> OK
 
@@ -122,7 +104,39 @@ SEND#_
 SR#_
 
 SA#_
+
+SETUP#<NIVEAU_SENDER>#
+
+SEND#M<MAC_SENDER>#C<Id_Mess>#D<Mess>#
+
+SEND_ADD#N<No_ANNEAU_SENDER#M<Mac_Sender>#C<Id_Mess>#D<Mess>#
 */
+/***
+**  J'AI RETIRE L'INACTIVE MODE POUR LE TEST DE SAUT 
+***/
+void loop() {
+ 
+  if(Initialisation){
+    InitMode();
+    if(millis() - start > 00000)
+      Initialisation = false;
+  }
+  else{
+    /*
+    if(isActive)
+      ActiveMode();
+    else{
+      InactiveMode();
+      Serial.flush(); //Flush
+    }
+    */
+     ActiveMode();
+  }
+  //ParserInfo("SEND#M4076205E#N4#DDUBOIS");
+  //ParserInfo("SETUP#1#");
+}
+
+/*** Fonction qui recoit une donnee et la traite ***/
 void ParserInfo(String data){
   String typeMessage, active, inactive, adresse;
   CycleArduino cycleA;
@@ -150,6 +164,14 @@ void ParserInfo(String data){
   }
   else if(typeMessage =="SA"){
     Serial.println("********ParserInfo TypeMessage : SA********");
+  }
+  else if(typeMessage =="SETUP"){
+    Serial.println("********ParserInfo TypeMessage : SETUP********");
+    TraitementSETUP(data);
+  }
+  else if(typeMessage =="SEND_ANN"){
+    Serial.println("********ParserInfo TypeMessage : SEND_ANN********");
+    TraitementSEND_ANN(data);
   }
   else{
     //Serial.println("Erreur : Aucun type de message correspondant.");
@@ -226,7 +248,7 @@ void TraitementSP(String data){
   }
 }
 
-//SEND#M_#N_#D_#
+//SEND#M_#C_#D_#
 //ACK#M_
 //Retourner type paquet : "ACK#N_#
 void TraitementSEND(String data){
@@ -251,7 +273,7 @@ void TraitementSEND(String data){
   do{
     i++;
   }while( i < data.length() && data.substring(i,i+1) != "#");
-  if(data.substring(indPrecedente+1,indPrecedente+2) == "N")
+  if(data.substring(indPrecedente+1,indPrecedente+2) == "C")
     numero = data.substring(indPrecedente+2,i);
   else
     Serial.println("Erreur : Paquet non conforme");
@@ -269,10 +291,59 @@ void TraitementSEND(String data){
   
   Serial.println("Adresse Mac : "+adressemac+" Numero message : "+numero+" Donnee message : "+donnee);
   
+  String data_ack;
+  
+  /*
+  Faire un retour paquet ACK vers le arduino
+  */
+  
   Serial.println("");
   
 }
 
+//SETUP#M1#
+void TraitementSETUP(String data){
+  int ReceiveLvl = data.substring(6,7).toInt();
+  String data_setup;
+  String tempLvl;
+  
+  if((MyLevel < ReceiveLvl) || (MyLevel != -1))
+  {
+     MyLevel = ReceiveLvl+1;
+     Serial.print("MyLevel :#");
+     Serial.print(MyLevel);
+     Serial.println("");
+     tempLvl = String(MyLevel);
+     data_setup = "SETUP#N"+tempLvl+"#";
+     
+     Serial.print("data_setup :");
+     Serial.print(data_setup);
+     Serial.println("");
+     
+     char myStg[10];
+     sprintf(myStg, "MyLevel : %d", MyLevel);
+     //printLCD(0,"",true);
+     printLCD(1,myStg,false);
+     
+     /** Envoyez des messages de type SETUP durant le temps d'inactivete Max qu'on possede **/
+     int tMax = RechercheMaxActivite();
+     int cpt_Setup = millis();
+     //while(millis() - cpt_active > 3){
+      sendData_B(data_setup);
+     //}
+      
+  }
+  else
+  {
+    Serial.print("MyLevel est superieur à ReceiveLvl");
+    Serial.println("");  
+  }
+  
+}
+
+void TraitementSEND_ANN(String data){
+  
+}
 
 /*** Transformation des paquets recu de type uint_8 en String ***/
 String ParseByteToString()
@@ -303,9 +374,27 @@ boolean RechercheMac(String mac)
   return(reponse);
   
 }
+/******************************************************* Recherche temps d'inactivité max dans la structure de données et renvoie ce max *******************************************/
+int RechercheMaxActivite(){
+  int i = 0;
+  int max = 0;
+  while (i<sizeStruct)
+  {
+    if (max < tabStruct[i].inactive)
+    {
+      max = tabStruct[i].inactive;
+    }
+    i++;
+  }
+  Serial.print("Le temps d'inactivite max dans notre structure est :");
+  Serial.println(max);
+  return max;
+}
+/*** 
+****Les differents mode de notre cycle 
+***/
 
-/*** Les differents mode de notre cycle ***/
-
+/*** Init Mode ***/
 void InitMode(){
   if(millis() - cpt_init > 1000) {
     cpt_init = millis();
@@ -313,34 +402,36 @@ void InitMode(){
     sendData_B(cycle);
     receiveData();
     ParserInfo(ParseByteToString());
-    //Serial.println("");
-    //Serial.println("Init Mode");
+    Serial.println("");
+    Serial.println("Init Mode");
  }
 }
-
+/*** Inactive Mode ***/
 void InactiveMode(){
-   if (millis() - cpt_active > 6000) {
+   if (millis() - cpt_active > 6000) { //6000
+     //printLCD(0,"Mode Inactive",true);
+     Serial.println("");
+     Serial.print("isInactive : ");
+     Serial.println(isActive);
      cpt_active = millis();
      isActive = true;
-     printLCD(0,"Mode Inactive",true);
-     Serial.println("");
-     Serial.print("isActive : " + isActive);
-     Serial.println(isActive);
    }
    receiveData();
 }
 
+/*** Active Mode ***/
 void ActiveMode(){
-  if (millis() - cpt_active > 5000) {
+  //if (millis() - cpt_active > 5000) { //5000
+     //printLCD(0,"Mode Active",false);
+     Serial.println("");
+     Serial.print("isActive : ");
+     Serial.println(isActive);
      cpt_active = millis();
      isActive = false;
-     printLCD(0,"Mode Active",true);
-     Serial.println("");
-     Serial.print("isActive : " + isActive);
-     //Serial.println(isActive);
-  }
+  //}
   receiveData();
-  sendData_B(Data);
+  ParserInfo(ParseByteToString());
+  //sendData_B(Data);
 }
  
 /*** Send Data ***/
@@ -363,7 +454,7 @@ void sendData_B(String data){
      data.toCharArray(charBuf, data.length()+1);
      
      //printLCD(0,"Data send", true);
-     printLCD(1,charBuf,false);
+     //printLCD(1,charBuf,false);
      
      //Send data
      xbee.send(tx);
@@ -390,7 +481,7 @@ void sendData_C(String data,String mac){
      data.toCharArray(charBuf, data.length()+1);
      
      //printLCD(0,"Data send", true);
-     printLCD(1,charBuf,false);
+     //printLCD(1,charBuf,false);
      
      //Send data
      xbee.send(tx);
@@ -405,7 +496,6 @@ void receiveData(){
     // got something
       if (xbee.getResponse().getApiId() == RX_16_RESPONSE || xbee.getResponse().getApiId() == RX_64_RESPONSE) {
         // got a rx packet
-        printLCD(0,"Data received", true);
         
         if (xbee.getResponse().getApiId() == RX_16_RESPONSE) {
           xbee.getResponse().getRx16Response(rx16);
@@ -418,7 +508,6 @@ void receiveData(){
             Serial.print((char)data_response[i]);
 	  }  
   	  Serial.println("");
-          
         } else {
           xbee.getResponse().getRx64Response(rx64);
           option = rx64.getOption();
@@ -430,10 +519,11 @@ void receiveData(){
             Serial.print((char)data_response[i]);
 	  }  
   	  Serial.println("");
-          
         }
          
       }
+      //printLCD(0,"Data received", true);
+      //printLCD(1,(const char*)data_response,true);
     }
 }
  
