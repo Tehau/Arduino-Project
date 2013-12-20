@@ -37,9 +37,9 @@ const int maxStruct = 7;
 CycleArduino CycleGlobal;
 //Tableau de structure
 struct CycleArduino tabStruct[maxStruct];
-//Data SP#M0x40762059#A3#I8#
-String cycle="SP#M0x40762059#A5#I6#";
-String Data="SEND#M0x40762059#C2#DDUBOIS";
+//Data SP#M0x40762053#A3#I8#
+String cycle="SP#M0x40762053#A5#I6#";
+String Data="SEND#M0x40762053#C2#DDUBOIS";
 int MyLevel = -1;
 //Boolean for active
 boolean isActive = true;
@@ -118,19 +118,19 @@ void loop() {
  
   if(Initialisation){
     InitMode();
-    if(millis() - start > 00000)
+    if(millis() - start > 30000)
       Initialisation = false;
   }
   else{
-    /*
+    
     if(isActive)
       ActiveMode();
     else{
       InactiveMode();
       Serial.flush(); //Flush
     }
-    */
-     ActiveMode();
+    
+    //ActiveMode();
   }
   //ParserInfo("SEND#M4076205E#N4#DDUBOIS");
   //ParserInfo("SETUP#1#");
@@ -152,24 +152,24 @@ void ParserInfo(String data){
     Serial.println("********ParserInfo TypeMessage : SP********");
     TraitementSP(data);
   }
-  else if(typeMessage =="ACK"){
+  else if(typeMessage =="ACK" && !Initialisation){
     Serial.println("********ParserInfo TypeMessage : ACK********");
   }
-  else if(typeMessage =="SEND"){
+  else if(typeMessage =="SEND" && !Initialisation){
     Serial.println("********ParserInfo TypeMessage : SEND********");
     TraitementSEND(data);
   }
-  else if(typeMessage =="SR"){
+  else if(typeMessage =="SR" && !Initialisation){
     Serial.println("********ParserInfo TypeMessage : SR********");
   }
-  else if(typeMessage =="SA"){
+  else if(typeMessage =="SA" && !Initialisation){
     Serial.println("********ParserInfo TypeMessage : SA********");
   }
-  else if(typeMessage =="SETUP"){
+  else if(typeMessage =="SETUP" && !Initialisation){
     Serial.println("********ParserInfo TypeMessage : SETUP********");
     TraitementSETUP(data);
   }
-  else if(typeMessage =="SEND_ANN"){
+  else if(typeMessage =="SEND_ANN" && !Initialisation){
     Serial.println("********ParserInfo TypeMessage : SEND_ANN********");
     TraitementSEND_ANN(data);
   }
@@ -234,6 +234,7 @@ void TraitementSP(String data){
     tabStruct[sizeStruct].inactive = inactive;
     Serial.println("Arduino bien rajoute | Mac : " + tabStruct[sizeStruct].adresseMac + " | Active : " + tabStruct[sizeStruct].active +" | Inactive : " +tabStruct[sizeStruct].inactive);
     sizeStruct += 1;
+    printLCD(1,"Add Arduino",false);
   }
   else
   {
@@ -307,10 +308,10 @@ void TraitementSETUP(String data){
   String data_setup;
   String tempLvl;
   
-  if((MyLevel < ReceiveLvl) || (MyLevel != -1))
+  if( (MyLevel < ReceiveLvl) && (MyLevel < 0) )
   {
      MyLevel = ReceiveLvl+1;
-     Serial.print("MyLevel :#");
+     Serial.print("MyLevel : ");
      Serial.print(MyLevel);
      Serial.println("");
      tempLvl = String(MyLevel);
@@ -319,30 +320,29 @@ void TraitementSETUP(String data){
      Serial.print("data_setup :");
      Serial.print(data_setup);
      Serial.println("");
-     
+     /*
      char myStg[10];
      sprintf(myStg, "MyLevel : %d", MyLevel);
-     //printLCD(0,"",true);
      printLCD(1,myStg,false);
-     
-     /** Envoyez des messages de type SETUP durant le temps d'inactivete Max qu'on possede **/
+     */
      int tMax = RechercheMaxActivite();
      int cpt_Setup = millis();
-     //while(millis() - cpt_active > 3){
-      sendData_B(data_setup);
-     //}
-      
+     
+     Serial.println(tMax);
+     while(millis() - cpt_Setup< (tMax*1000) ){
+       sendData_B(data_setup);
+     }
   }
   else
   {
-    Serial.print("MyLevel est superieur à ReceiveLvl");
+    Serial.print("MyLevel est superieur a ReceiveLvl");
     Serial.println("");  
   }
   
 }
 
 void TraitementSEND_ANN(String data){
-  
+    
 }
 
 /*** Transformation des paquets recu de type uint_8 en String ***/
@@ -396,38 +396,46 @@ int RechercheMaxActivite(){
 
 /*** Init Mode ***/
 void InitMode(){
-  if(millis() - cpt_init > 1000) {
+  if(millis() - cpt_init > 1000) 
+  {
     cpt_init = millis();
     printLCD(0,"Mode Init",true);
     sendData_B(cycle);
     receiveData();
     ParserInfo(ParseByteToString());
-    Serial.println("");
-    Serial.println("Init Mode");
+    //Serial.println("");
+    //Serial.println("Init Mode");
  }
 }
 /*** Inactive Mode ***/
 void InactiveMode(){
-   if (millis() - cpt_active > 6000) { //6000
-     //printLCD(0,"Mode Inactive",true);
+   if (millis() - cpt_active > 6000) //6000
+   { 
+     printLCD(0,"Mode Inactive",true);
      Serial.println("");
      Serial.print("isInactive : ");
      Serial.println(isActive);
      cpt_active = millis();
      isActive = true;
    }
+   //else{
+    //printLCD(0,"Mode Active",true);
+   //}
    receiveData();
 }
 
 /*** Active Mode ***/
 void ActiveMode(){
-  //if (millis() - cpt_active > 5000) { //5000
-     //printLCD(0,"Mode Active",false);
+  if (millis() - cpt_active > 5000) { //5000
+     printLCD(0,"Mode Active",true);
      Serial.println("");
      Serial.print("isActive : ");
      Serial.println(isActive);
      cpt_active = millis();
      isActive = false;
+  }
+  //else{
+    //printLCD(0,"Mode Inactive",true);
   //}
   receiveData();
   ParserInfo(ParseByteToString());
